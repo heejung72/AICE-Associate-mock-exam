@@ -31,7 +31,7 @@ df.isnull().sum()
 
 ```python
 sns.countplot(data=df, x='col')              # 범주별 개수
-sns.histplot(data=df, x='col')               # 분포
+sns.histplot(data=df, x='col', bins=20, kde=True)   # 분포 + 곡선
 sns.boxplot(data=df, x='범주', y='숫자')      # 이상치 확인
 sns.heatmap(df.corr(numeric_only=True), annot=True, fmt='.2f', cmap='coolwarm')
 ```
@@ -40,15 +40,32 @@ sns.heatmap(df.corr(numeric_only=True), annot=True, fmt='.2f', cmap='coolwarm')
 
 ```python
 # 컬럼 삭제
-df1 = df.drop(columns=['id_col'])
+df1 = df.drop(columns=['id_col'])          # 또는 drop('col', axis=1)
 
-# 결측치
-df1['col'] = df1['col'].fillna(df1['col'].median())   # 중앙값
-df1 = df1.dropna(subset=['col'])                        # 행 삭제
+# 결측치 개수
+df.isnull().sum()          # 컬럼별
+df.isnull().sum().sum()    # 전체
 
-# 이상치
-df1 = df1[df1['col'] > 0]
-df1 = df1[(df1['col'] >= Q1 - 1.5*IQR) & (df1['col'] <= Q3 + 1.5*IQR)]
+# 복사본 (원본 보존)
+df_fill = df.copy()        # df_fill = df 는 같은 객체라 원본도 바뀜
+
+# 결측치 채우기
+df1['col'] = df1['col'].fillna(df1['col'].median())    # 숫자 → 중앙값
+df1['col'] = df1['col'].fillna(df1['col'].mode()[0])   # 글자 → 최빈값 [0] 필수!
+df1 = df1.dropna()                                      # 결측 행 전체 삭제
+
+# 이상치 (IQR 정석)
+Q1 = df['col'].quantile(0.25)
+Q3 = df['col'].quantile(0.75)
+IQR = Q3 - Q1
+lower_fence = Q1 - 1.5 * IQR
+upper_fence = Q3 + 1.5 * IQR
+cond = (df['col'] < lower_fence) | (df['col'] > upper_fence)  # 울타리 밖 조건
+df1 = df.drop(df[cond].index, axis=0)      # 이상치 행 삭제 → index 넘겨야 함
+df1.reset_index(drop=True, inplace=True)   # 인덱스 초기화
+
+# 값 바꾸기 (loc 사용 — 대입은 항상 loc!)
+df1.loc[df1['col'].isin(['A', 'B']), 'col'] = 'other'
 
 # 값 변환
 df1['col'] = df1['col'].map({'A': 0, 'B': 1})
@@ -56,6 +73,9 @@ df1['col'] = df1['col'].astype(int)
 
 # 중복 제거
 df1 = df1.drop_duplicates()
+
+# object 컬럼 목록
+df1.select_dtypes(include='object').columns.tolist()
 
 # 원핫 인코딩
 df1 = pd.get_dummies(df1, columns=['col1', 'col2'], drop_first=True)
@@ -105,10 +125,11 @@ pred = model.predict(X_test)
 **분류**
 
 ```python
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 print(accuracy_score(y_test, pred))
 print(classification_report(y_test, pred))
+print(confusion_matrix(y_test, pred))
 ```
 
 **회귀**
@@ -168,6 +189,48 @@ plt.legend()
 plt.show()
 ```
 
+## feature_importances_
+
+```python
+# 일반 모델에서
+rf = RandomForestClassifier()
+rf.fit(X_train, y_train)
+rf.feature_importances_
+
+# GridSearchCV 사용 후
+gs = GridSearchCV(rf, param_grid, cv=5)
+gs.fit(X_train, y_train)
+gs.best_estimator_.feature_importances_   # best_estimator_ 거쳐야 함
+gs.best_params_                            # 최적 파라미터 확인
+```
+
+## GridSearchCV import
+
+```python
+from sklearn.model_selection import train_test_split, GridSearchCV
+```
+
+## 분석 함수 모음
+
+```python
+# 상관계수
+df.corr(numeric_only=True)
+corr.loc['col1', 'col2']   # 특정 두 컬럼 상관계수
+
+# 그룹별 평균 (생존율 등)
+df.groupby('Sex')['Survived'].mean()
+
+# 교차표
+pd.crosstab(df['Sex'], df['Survived'])
+ct.loc['male', 1]   # 남성 생존자 수
+
+# 정렬
+df.sort_values('col', ascending=False).head(3)   # 내림차순
+
+# 반올림
+round(값, 소수자리수)
+```
+
 ## 자주 틀리는 것
 
 1. `train_test_split` 반환 순서 헷갈림
@@ -175,3 +238,9 @@ plt.show()
 3. 출력층 activation과 loss 짝 안 맞춤
 4. 문제에서 지정한 변수명 안 지킴
 5. `drop` 후 새 변수에 저장 안 함
+6. `df.shape` — 괄호 없음 (메서드 아니고 속성)
+7. 조건 필터링 시 각 조건마다 괄호 필수: `(df['A'] > 0) & (df['B'] == 1)`
+8. `mode()` 뒤에 `[0]` 안 붙임
+9. 이상치 삭제 시 `drop(df[cond].index, axis=0)` — `.index` 빠뜨림
+10. 값 대입 시 `loc` 안 쓰면 원본 안 바뀜
+11. `corr()`에 `numeric_only=True` 빠뜨림
