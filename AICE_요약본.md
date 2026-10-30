@@ -231,6 +231,30 @@ df.sort_values('col', ascending=False).head(3)   # 내림차순
 round(값, 소수자리수)
 ```
 
+## 기타 자주 나오는 것
+
+```python
+# LabelEncoder (이진 아닌 순서 있는 범주형)
+from sklearn.preprocessing import LabelEncoder
+le = LabelEncoder()
+df['col'] = le.fit_transform(df['col'])
+
+# 문자열 처리
+df[df['col'].str.contains('키워드')]   # 특정 문자 포함 행 필터
+df['col'].str.upper()
+df['col'].str.replace('a', 'b')
+
+# 날짜 처리
+df['date'] = pd.to_datetime(df['date'])
+df['year'] = df['date'].dt.year
+
+# 컬럼명 변경
+df = df.rename(columns={'old': 'new'})
+
+# 딥러닝 구조 확인
+model.summary()
+```
+
 ## 자주 틀리는 것
 
 1. `train_test_split` 반환 순서 헷갈림
